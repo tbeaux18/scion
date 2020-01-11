@@ -1,0 +1,14 @@
+# start from base
+FROM ubuntu:r35
+MAINTAINER Timothy Baker <tbaker8@luc.edu>
+
+RUN apt-get update && \
+    apt-get upgrade -y && \
+    apt-get install -y git
+
+RUN \
+  R -e "install.packages(c('inflection', 'DT', 'stringr', 'htmltools', 'parallel'))"
+
+WORKDIR /pipeline/SCRAPIE
+
+CMD ["python3", "main_pipeline.py", "-s", "/pipeline/SampleInfo.csv", "-e", "/pipeline/ExperimentDesign.csv"]
