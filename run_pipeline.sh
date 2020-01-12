@@ -13,6 +13,5 @@ docker run \
   --name scrna_pipeline \
   --user $(id -u):$(id -g) \
   -d \
-  --rm \
   -v "${parentdir}":/pipeline \
   ubuntur35:pipeline
