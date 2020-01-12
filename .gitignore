@@ -3,3 +3,5 @@
 *.pyc
 *.xlsx
 *.log
+*.DS_Store
+*.yaml
