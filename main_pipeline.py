@@ -426,12 +426,16 @@ def run_main_pipeline(sample_info_dict):
     """ function that runs all pipeline """
 
     # need to fix fastqs paths
+    print('running fastqc')
     run_fastqc(**sample_info_dict)
 
+    print('running cutadapt')
     run_cutadapt(**sample_info_dict)
 
+    print('building star index')
     build_star_index(**sample_info_dict)
 
+    print('running zumi')
     run_zumi_pipeline(**sample_info_dict)
 
 def main():
@@ -448,9 +452,9 @@ def main():
 
     new_sample_info = build_zumi_yaml(sample_info)
 
-    # run_main_pipeline(new_sample_info)
+    run_main_pipeline(new_sample_info)
 
-    print(new_sample_info)
+    
 
 if __name__ == '__main__':
     main()
