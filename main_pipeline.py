@@ -299,6 +299,9 @@ def parse_sample_exp_args(sample_sheet_path, exp_design_path):
         sample_info_dict['current_wd'].joinpath('dmel_star_idx_NOGTF')
     )
 
+    # need to creating star index directory
+    pathlib.Path(sample_info_dict['star_idx_dir']).mkdir(exist_ok=True)
+
     # capturing threads
     sample_info_dict['threads'] = int(threads_use)
 
@@ -429,8 +432,13 @@ def run_main_pipeline(sample_info_dict):
     print('running fastqc')
     run_fastqc(**sample_info_dict)
 
-    print('running cutadapt')
-    run_cutadapt(**sample_info_dict)
+
+    if (pathlib.Path(sample_info_dict['trimmed_r1']).exists() and
+            pathlib.Path(sample_info_dict['trimmed_r2']).exists()):
+        logging.info('trimmed fastqs detected, skipping cutadapt')
+    else:
+        print('trimmed files not detected. running cutadapt')
+        run_cutadapt(**sample_info_dict)
 
     print('building star index')
     build_star_index(**sample_info_dict)
