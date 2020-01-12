@@ -54,7 +54,6 @@ root:pipeline_example example$
 ├── scion
 ├── SampleInfo.csv
 ├── ExperimentDesign.csv
-├── zUMIs240
 ├── read1.fastq.gz
 ├── read2.fastq.gz
 ├── ref_genome.fa
