@@ -70,10 +70,10 @@ RUN \
   R -e "install.packages(c( \
           'yaml','shiny','shinythemes','shinyBS','ggplot2','mclust','dplyr', \
           'cowplot','Matrix','BiocManager','devtools','stringdist','data.table', \
-          'plotly', 'crosstalk'))" \
+          'plotly', 'crosstalk', 'inflection', 'DT', 'stringr', 'htmltools', 'parallel'))" \
   && R -e "BiocManager::install(c( \
             'GenomicRanges','GenomicFeatures', \
             'GenomicAlignments','AnnotationDbi','Rsubread', \
-            'Glimma', 'edgeR'))" \
+            'Glimma', 'edgeR', 'DESeq2'))" \
   && R -e "devtools::install_github('hadley/multidplyr')" \
   && R -e "devtools::install_github('VPetukhov/ggrastr')"
