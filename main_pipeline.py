@@ -3,8 +3,10 @@
 @author: Timothy Baker
 @date: 01/11/2020
 
+Need to add a lot more error handling if anything other than Filtering is chosen
 """
 
+import re
 import csv
 import argparse
 import pathlib
@@ -167,11 +169,6 @@ def build_star_index(**kwargs):
 
     logging.info('STAR index build args: %s', star_build_index_cmd)
 
-
-
-
-
-
     with open(kwargs['star_idx_log'], 'ab+') as staridx_stdout:
 
         try:
@@ -258,7 +255,7 @@ def run_zumi_pipeline(**kwargs):
 
 
 
-def parse_sample_exp_args(sample_sheet_path, exp_design_path):
+def parse_sample_exp_args(sample_sheet_path):
     """ parses sample info into dict
         param:
             sample_sheet_path (str) : sample info path from args
@@ -266,50 +263,100 @@ def parse_sample_exp_args(sample_sheet_path, exp_design_path):
             sample_info_dict (dict) : dict of info to pass to pipeline
     """
 
-    host_threads = mp.cpu_count()
-    logging.info('host threads avail: %s', host_threads)
+    sample_info_fields_int = [
+        'bc_filter_num_bases',
+        'bc_filter_phred',
+        'bc_ham_dist',
+        'umi_filter_num_bases',
+        'umi_filter_phred',
+        'umi_ham_dist',
+        'min_length_r1',
+        'min_length_r2'
+    ]
 
-    threads_use = host_threads - 5
-    logging.info('threads to use: %s', threads_use)
+    pipeline_path = [
+        'fastq_read_1',
+        'fastq_read_2',
+        'ref_genome_fasta',
+        'ref_annotation_gtf',
+        'zumi_pipeline_path'
+    ]
 
-    # load exp design in pandas path
-    expdesign_df = pd.read_csv(exp_design_path)
+    zumi_stage_options = ['Filtering', 'Mapping', 'Counting', 'Summarising']
+
+    pipeline_regex = re.compile(r'^/pipeline/')
 
     # dict will hold all info and paths
     sample_info_dict = {}
 
     # need to add more checks to make sure no unsuspecting inputs
-    with open(sample_sheet_path, 'r') as file:
-        reader = csv.reader(file)
-        for row in reader:
-            sample_info_dict[row[0]] = row[1]
+    with open(sample_sheet_path, 'r') as input_file:
 
+        reader = csv.reader(input_file)
+
+        for row in reader:
+
+            # setting numbers in sampleinfo to integers
+            if row[0] in sample_info_fields_int:
+                sample_info_dict[row[0]] = int(row[1])
+
+            # ensuring that /pipeline/ is first in path due to docker paths
+            elif row[0] in pipeline_path:
+                if pipeline_regex.match(row[1]):
+                    sample_info_dict[row[0]] = row[1]
+                    logging.info('/pipeline/ detected in path: %s', row[1])
+
+                else:
+                    logging.error('/pipeline/ is missing from path')
+
+            # ensuring that a valid zumi stage was entered
+            elif row[0] == 'zumi_start_stage':
+                if row[1] in zumi_stage_options:
+                    sample_info_dict[row[0]] = row[1]
+                    logging.info('correct stage detected: %s', row[1])
+                else:
+                    print('Error: Filtering, Mapping, Counting, Summarising are the only options.')
+                    logging.error('incorrect params entered.')
+
+            else:
+                sample_info_dict[row[0]] = row[1]
+
+    return sample_info_dict
+
+
+def add_paths_to_sample_dict(sample_info_dict, exp_design_path):
+    """ adding paths to the main sample dict """
+
+    path_array = [
+        ('fastqc_dir', 'fastqc_output'),
+        ('barcode_file', 'barcode_whitelist.txt'),
+        ('star_idx_dir', 'dmel_star_idx_NOGTF')
+    ]
+
+    log_paths = [
+        ('fastqc_log', 'fastqc_log.txt'),
+        ('cutadapt_log', 'cutadapt_log.txt'),
+        ('star_idx_log', 'star_idx_log.txt'),
+        ('zumi_stdout', 'zumi_stdout.txt')
+    ]
+
+    host_threads = mp.cpu_count()
+    logging.info('host threads avail: %s', host_threads)
+
+    sample_info_dict['threads'] = int(host_threads - 5)
+    logging.info('threads to use: %s', sample_info_dict['threads'])
 
     # adding necessary paths to pass to zumi yaml builder
     sample_info_dict['current_wd'] = pathlib.Path.cwd()
 
 
-    sample_info_dict['fastqc_dir'] = str(
-        sample_info_dict['current_wd'].joinpath('fastqc_output')
-    )
+    for path_key, path_val in path_array:
+        sample_info_dict[path_key] = str(PARENT_PATH.joinpath(path_val))
 
-    sample_info_dict['barcode_file'] = str(
-        sample_info_dict['current_wd'].joinpath('barcode_whitelist.txt')
-    )
 
-    sample_info_dict['star_idx_dir'] = str(
-        sample_info_dict['current_wd'].joinpath('dmel_star_idx_NOGTF')
-    )
+    for log_key, log_file in log_paths:
+        sample_info_dict[log_key] = str(PARENT_PATH.joinpath('logs', log_file))
 
-    # need to creating star index directory
-    pathlib.Path(sample_info_dict['star_idx_dir']).mkdir(exist_ok=True)
-
-    # capturing threads
-    sample_info_dict['threads'] = int(threads_use)
-
-    # converting from string to integer
-    sample_info_dict['min_length_r1'] = int(sample_info_dict['min_length_r1'])
-    sample_info_dict['min_length_r2'] = int(sample_info_dict['min_length_r2'])
 
     sample_info_dict['trimmed_r1'] = str(
         sample_info_dict['current_wd'].joinpath(
@@ -332,28 +379,25 @@ def parse_sample_exp_args(sample_sheet_path, exp_design_path):
         )
     )
 
-    # adding log paths
-    sample_info_dict['fastqc_log'] = str(PARENT_PATH.joinpath('logs', 'fastqc_log.txt'))
-    sample_info_dict['cutadapt_log'] = str(PARENT_PATH.joinpath('logs', 'cutadapt_log.txt'))
-    sample_info_dict['star_idx_log'] = str(PARENT_PATH.joinpath('logs', 'star_idx_log.txt'))
-    sample_info_dict['zumi_stdout'] = str(PARENT_PATH.joinpath('logs', 'zumi_stdout.txt'))
-
-
+    # load exp design in pandas path
+    expdesign_df = pd.read_csv(exp_design_path)
     # need to ensure barcode_sequence is present
     with open(sample_info_dict['barcode_file'], 'w+') as barcode_output:
         barcode_output.write(
             '\n'.join(expdesign_df['barcode_sequence'].tolist())
         )
+        logging.info('created barcode whitelist text file: %s', sample_info_dict['barcode_file'])
 
 
-
-    # maybe creating all directories first?
+    # need to creating star index directory
+    pathlib.Path(sample_info_dict['star_idx_dir']).mkdir(exist_ok=True)
     pathlib.Path(sample_info_dict['zumi_output_dir']).mkdir(exist_ok=True)
-    logging.info('zumi output dir set up')
 
 
-    logging.info('sample info: %s', sample_info_dict)
+    logging.info('sample info before passing to zumi yaml build: %s', sample_info_dict)
     return sample_info_dict, expdesign_df
+
+
 
 
 def build_zumi_yaml(sample_info_dict):
@@ -430,7 +474,7 @@ def build_zumi_yaml(sample_info_dict):
 def run_main_pipeline(sample_info_dict):
     """ function that runs all pipeline """
 
-    # need to fix fastqs paths
+
     print('running fastqc')
     run_fastqc(**sample_info_dict)
 
@@ -463,13 +507,16 @@ def main():
 
     logging.info('sample sheet path: %s', args.sample_sheet)
     logging.info('exp design path: %s', args.exp_design)
-    sample_info, exp_df = parse_sample_exp_args(args.sample_sheet, args.exp_design)
 
-    new_sample_info = build_zumi_yaml(sample_info)
+    sample_info = parse_sample_exp_args(args.sample_sheet)
 
-    run_main_pipeline(new_sample_info)
+    sample_info_w_paths, exp_df = add_paths_to_sample_dict(sample_info, args.exp_design)
 
+    new_sample_info = build_zumi_yaml(sample_info_w_paths)
 
+    # run_main_pipeline(new_sample_info)
+
+    print(sample_info_w_paths)
 
 
 if __name__ == '__main__':
