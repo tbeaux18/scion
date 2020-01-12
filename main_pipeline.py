@@ -167,6 +167,11 @@ def build_star_index(**kwargs):
 
     logging.info('STAR index build args: %s', star_build_index_cmd)
 
+
+
+
+
+
     with open(kwargs['star_idx_log'], 'ab+') as staridx_stdout:
 
         try:
@@ -183,41 +188,38 @@ def build_star_index(**kwargs):
             logging.exception('star idx failed: %s', call_error)
 
 
+def check_star_idx_exists(star_idx_dir):
+    """ checks to see if all files in star idx are present """
 
-    # # checking if one of the genome index files exist
-    # saidx_path = kwargs['dmel_index_dir'] + '/SAindex'
-    # genparam_path = kwargs['dmel_index_dir'] + '/genomeParameters.txt'
-    #
-    # idx_file = Path(saidx_path)
-    #
-    # if not idx_file.is_file():
-    #     LOGGER.info("Genome index not detected.")
-    #     LOGGER.info("Building genome index.")
-    #
-    #     with open('./logs/star_index_std.txt', 'ab+') as star_stdout:
-    #         star_index_process = subprocess.Popen(
-    #             star_idx_formatted_args,
-    #             bufsize=50,
-    #             stdout=star_stdout,
-    #             stderr=star_stdout
-    #         )
-    #         star_index_process.communicate()
-    # else:
-    #     LOGGER.info("Genome index detected.")
-    #     LOGGER.info("Checking if index is built with same fasta file.")
-    #
-    #     with open(genparam_path, 'r') as infile:
-    #         # grabs fasta path from genomeparam file
-    #         built_idx_fasta = ''.join(
-    #             [filepath[1] for filepath in
-    #              [line.split() for line in infile]
-    #              if filepath[0] == 'genomeFastaFiles']
-    #             )
-    #         if built_idx_fasta == kwargs['ref_fasta_file']:
-    #             LOGGER.info("Genome index built with same reference fasta file.")
-    #         else:
-    #             LOGGER.info("""Genome index not built with same
-    #                 reference fasta file or filename has changed.""")
+    staridx_files = [
+        'chrLength.txt',
+        'chrName.txt',
+        'Genome',
+        'SA',
+        'chrNameLength.txt',
+        'chrStart.txt',
+        'genomeParameters.txt',
+        'SAindex'
+    ]
+
+    # boolean array
+    file_result = []
+
+    for file in staridx_files:
+        star_file = pathlib.Path(star_idx_dir).joinpath(file)
+
+        if star_file.exists():
+
+            file_result.append(True)
+
+        else:
+            file_result.append(False)
+
+    if all(file_result):
+        return True
+
+    return False
+
 
 
 def run_zumi_pipeline(**kwargs):
@@ -440,8 +442,13 @@ def run_main_pipeline(sample_info_dict):
         print('trimmed files not detected. running cutadapt')
         run_cutadapt(**sample_info_dict)
 
-    print('building star index')
-    build_star_index(**sample_info_dict)
+
+    if check_star_idx_exists(sample_info_dict['star_idx_dir']):
+        logging.info('star idx files detected')
+
+    else:
+        print('building star index')
+        build_star_index(**sample_info_dict)
 
     print('running zumi')
     run_zumi_pipeline(**sample_info_dict)
@@ -461,6 +468,7 @@ def main():
     new_sample_info = build_zumi_yaml(sample_info)
 
     run_main_pipeline(new_sample_info)
+
 
 
 
