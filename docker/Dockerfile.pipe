@@ -11,4 +11,4 @@ RUN \
 
 WORKDIR /pipeline/scion
 
-CMD ["python3", "main_pipeline.py", "-s", "/pipeline/SampleInfo.csv", "-e", "/pipeline/ExperimentDesign.csv"]
+CMD ["python3", "scion_pipeline.py", "-s", "/pipeline/SampleInfo.csv", "-e", "/pipeline/ExperimentDesign.csv"]
