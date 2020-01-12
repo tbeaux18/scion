@@ -203,9 +203,8 @@ def check_star_idx_exists(star_idx_dir):
     file_result = []
 
     for file in staridx_files:
-        star_file = pathlib.Path(star_idx_dir).joinpath(file)
 
-        if star_file.exists():
+        if pathlib.Path(star_idx_dir).joinpath(file).exists():
 
             file_result.append(True)
 
@@ -474,7 +473,6 @@ def build_zumi_yaml(sample_info_dict):
 def run_main_pipeline(sample_info_dict):
     """ function that runs all pipeline """
 
-
     print('running fastqc')
     run_fastqc(**sample_info_dict)
 
@@ -514,10 +512,7 @@ def main():
 
     new_sample_info = build_zumi_yaml(sample_info_w_paths)
 
-    # run_main_pipeline(new_sample_info)
-
-    print(sample_info_w_paths)
-
+    run_main_pipeline(new_sample_info)
 
 if __name__ == '__main__':
     main()
