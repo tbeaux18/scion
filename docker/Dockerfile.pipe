@@ -9,6 +9,6 @@ RUN apt-get update && \
 RUN \
   R -e "install.packages(c('inflection', 'DT', 'stringr', 'htmltools', 'parallel'))"
 
-WORKDIR /pipeline/SCRAPIE
+WORKDIR /pipeline/scion
 
 CMD ["python3", "main_pipeline.py", "-s", "/pipeline/SampleInfo.csv", "-e", "/pipeline/ExperimentDesign.csv"]
