@@ -21,6 +21,7 @@ run_scRNAseq_ZINB_DESeq <- function(count_matrix, expdesign, colCondition, alpha
   dds <- dds[filter,]
   dds_list[["dds"]] <- dds
   
+  # params are based on current literature
   zinb <- zinbwave(dds, K=0, BPPARAM=SerialParam(), epsilon=1e12)
   dds_list[["zinb"]] <- zinb
   
@@ -30,9 +31,18 @@ run_scRNAseq_ZINB_DESeq <- function(count_matrix, expdesign, colCondition, alpha
   # these settings are recommended by latest literature for single cell testing especially with UMI Counts
   # using LRT is suggested;
   # LRT works by determining p-values by finding the difference in deviance between full and reduced models
-  # these are NOT log2fold changes
+  # these are NOT testing log2fold ratios
+  # The LRT examines two
+  # models for the counts, a full model with a certain number of terms and a reduced model, in which some of
+  # the terms of the full model are removed. The test determines if the increased likelihood of the data using the
+  # extra terms in the full model is more than expected if those extra terms are truly zero.
   zinb.dds <- DESeq(zinb.dds, test="LRT", reduced = ~1, sfType="poscounts", minmu=1e-6, minReplicatesForReplace=Inf)
+  p <- plotDispEsts(zinb.dds)
   dds_list[["zinb.dds"]] <- zinb.dds
+  dds_list[["dispersion.plot"]] <- p
+  
+  rld <- rlog(zinb.dds)
+  dds_list[["rld"]] <- rld
   
   # grabs DGE results from dds object
   # zinb.res <- results(zinb.dds, alpha=alpha)
@@ -84,7 +94,6 @@ umi.count <- as.matrix(umi.count)
 
 
 
-
 # plotting library sizes for each sample
 librarySizes <- as.data.frame(colSums(umi.count))
 colnames(librarySizes) <- c("lib_size")
@@ -94,17 +103,105 @@ ggplot(librarySizes, aes(x=rownames(librarySizes), y=lib_size)) +
   labs(x = "Cell ID", y = "Library Size", title="Library Size (# of Total Counts) per Cell")
 
 
-# plotting PCA of the original data
+
 library(ggfortify)
+# plotting PCA of the original data
 rlogcounts <- rlog(as.matrix(umi.count))
 # run PCA
 pcDat <- prcomp(t(rlogcounts))
-
 # plot PCA
 # change x and y to principal component numbers you would like to compare
 autoplot(pcDat, x=1, y=2, data = exp_design, colour="condition", shape="gfp_status",size=3)
 
 
+
+# filter experimental design to just GFP positive cells to compare fed vs. starved conditions
+gfp.design <- exp_design %>% filter(gfp_status == 'positive')
+gfp.cts <- as.data.frame(umi.count) %>% select(gfp.design$sample_name) %>% as.matrix()
+gfp_dds <- run_scRNAseq_ZINB_DESeq(count_matrix=gfp.cts, expdesign=gfp.design, colCondition=~condition, alpha=0.1)
+gfp_dds_5 <- run_scRNAseq_ZINB_DESeq(count_matrix=gfp.cts, expdesign=gfp.design, colCondition=~condition, alpha=0.05)
+write.csv(gfp_dds$zinb.res, file='gfp_dge_results.csv')
+
+
+### reduced based on one starved cell showing more counts than most other cells
+gfp.design.reduced <- gfp.design %>% filter(sample_name != 'sta-gfp-2L(S2.2)')
+gfp.cts.reduced <- as.data.frame(umi.count) %>% select(gfp.design.reduced$sample_name) %>% as.matrix()
+gfp_dds.reduced <- run_scRNAseq_ZINB_DESeq(count_matrix=gfp.cts.reduced, expdesign=gfp.design.reduced, colCondition=~condition, alpha=0.1)
+
+
+
+library(genefilter)
+library(gplots)
+library(RColorBrewer)
+
+
+# shows heat maps of top 35 highly expressed genes for GFP positive between starve vs. fed states
+select <- order(rowMeans(counts(gfp_dds$zinb.dds, normalized=TRUE)),decreasing=TRUE)[1:35]
+hmcol <- colorRampPalette(brewer.pal(9, "GnBu"))(100)
+
+# heat map of raw counts
+heatmap.2(counts(gfp_dds$zinb.dds,normalized=TRUE)[select,], col = hmcol,
+          Rowv = FALSE, Colv = FALSE, scale="none",
+          dendrogram="none", trace="none", margin=c(10,6))
+# heat map of regularized log transformation counts
+heatmap.2(assay(gfp_dds$rld)[select,], col = hmcol,
+          Rowv = TRUE, Colv = TRUE, scale="none",
+          dendrogram="none", trace="none", margin=c(10, 6))
+
+
+
+# no Ilp2 or Ilp1
+# make a character vector such as this with the names of the genes
+neuro_list <- c('Mip', 'SIFa', 'CCAP', 'Capa', 'Akh', 'Hug', 'Ilp7', 'AstCC', 'Ptth', 'Ilp8', 'Eh', 'SP', 'CCHa1', 'ETH', 'Lk', 'Ilp4', 'Gpa2', 'Pburs', 'FMRFa', 'Ilp5', 'Crz', 'Ilp3', 'NPF', 'Nplp2', 'Dh31', 'Gpb5', 'Ms', 'Dsk', 'ITP', 'CCHa2', 'AstC', 'Orcokinin', 'Nplp3', 'Ilp6', 'Nplp1', 'Proc', 'Tk', 'Nplp4', 'AstA', 'Dh44')
+
+# creates a blue to red color palette
+neuro.hmcol <- colorRampPalette(rev(brewer.pal(9, "RdBu")))(100)
+
+# finds the indices of the desired genes in the character vector you make
+# make sure to change the neuro_list to whatever character vector variable name
+idx <- which(rownames(assay(gfp_dds$rld)) %in% neuro_list, arr.ind=TRUE)
+# generates the heat map in order
+# need to fix the number of genes showing up on the y axis
+heatmap.2(assay(gfp_dds$rld)[idx,], col = neuro.hmcol,
+          Rowv = TRUE, Colv = TRUE, scale="none",
+          dendrogram="none", trace="none", margin=c(10, 6))
+
+
+
+# regularized log transformation
+# remove the dependence of the variance on the mean, 
+# particularly the high variance of the logarithm of count data when the mean is low.
+# rowvars fxn grabs variance of numeric array
+topVarGenes <- head(order(rowVars(assay(gfp_dds$rld)), decreasing=TRUE ), 35)
+
+# generates heat map based on variance
+# heat map of top 35 genes plotted for each cell. 
+# the amount by which each gene deviates in a specific sample from the gene’s average across all samples
+heatmap.2( assay(gfp_dds$rld)[ topVarGenes, ], scale="row",
+           trace="none", dendrogram="column", cexCol = 0.5,
+           col = colorRampPalette( rev(brewer.pal(9, "RdBu")) )(255))
+
+
+# heat map of sample to sample distance
+distsRL <- dist(t(assay(gfp_dds$rld)))
+mat <- as.matrix(distsRL)
+hc <- hclust(distsRL)
+heatmap.2(mat, Rowv=as.dendrogram(hc),
+          symm=TRUE, trace="none",
+          col = rev(hmcol), margin=c(13, 13))
+
+
+# plotting PCA of GFP positive fed vs. starved
+# can only plot PC1 vs. PC2; function from DESeq2 library
+plotPCA(gfp_dds$rld, intgroup=c("condition"))
+
+
+
+##############################################################################
+
+# BELOW IS JUST QC RUNS COMPARING GFP STATUS
+
+##############################################################################
 
 # filter experiment design sheet to fed to compare GFP pos vs. neg DGE
 fed.design <- exp_design %>% filter(condition == 'fed')
@@ -117,20 +214,3 @@ starve.design <- exp_design %>% filter(condition == 'starved')
 starve.cts <- as.data.frame(umi.count) %>% select(starve.design$sample_name) %>% as.matrix()
 starve_dds <- run_scRNAseq_ZINB_DESeq(count_matrix=starve.cts, expdesign=starve.design, colCondition=~gfp_status, alpha=0.1)
 write.csv(starve_dds$zinb.res, file='starved_dge_results.csv')
-
-# filter experimental design to just GFP positive cells to compare fed vs. starved conditions
-gfp.design <- exp_design %>% filter(gfp_status == 'positive')
-gfp.cts <- as.data.frame(umi.count) %>% select(gfp.design$sample_name) %>% as.matrix()
-gfp_dds <- run_scRNAseq_ZINB_DESeq(count_matrix=gfp.cts, expdesign=gfp.design, colCondition=~condition, alpha=0.1)
-write.csv(gfp_dds$zinb.res, file='gfp_dge_results.csv')
-
-
-# heat map of top 35 genes plotted for each cell. 
-# the amount by which each gene deviates in a specific sample from the gene’s average across all samples.
-library(genefilter)
-library(gplots)
-rld <- rlog(gfp_dds$zinb.dds)
-topVarGenes <- head( order( rowVars( assay(rld) ), decreasing=TRUE ), 35)
-heatmap.2( assay(rld)[ topVarGenes, ], scale="row",
-           trace="none", dendrogram="column", cexCol = 0.5,
-           col = colorRampPalette( rev(brewer.pal(9, "RdBu")) )(255))
