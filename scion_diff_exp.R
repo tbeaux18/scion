@@ -14,9 +14,9 @@ run_scRNAseq_ZINB_DESeq <- function(count_matrix, expdesign, colCondition, alpha
   dds <- DESeqDataSetFromMatrix(countData = count_matrix, colData = expdesign, design=as.formula(colCondition))
   
   
-  # filtering criteria: at least 5 samples have at least 5 counts; can be changed
-  # filter <- rowSums(counts(dds)) >= 10
-  filter <- rowSums(assay(dds) > 5) > 5 
+  # filtering criteria: the sum of all counts down row must be greater than or equal to 5, regardless of number of samples
+  filter <- rowSums(counts(dds)) >= 5
+  # filter <- rowSums(assay(dds) > 1) > 5
   
   dds <- dds[filter,]
   dds_list[["dds"]] <- dds
@@ -119,7 +119,7 @@ autoplot(pcDat, x=1, y=2, data = exp_design, colour="condition", shape="gfp_stat
 gfp.design <- exp_design %>% filter(gfp_status == 'positive')
 gfp.cts <- as.data.frame(umi.count) %>% select(gfp.design$sample_name) %>% as.matrix()
 gfp_dds <- run_scRNAseq_ZINB_DESeq(count_matrix=gfp.cts, expdesign=gfp.design, colCondition=~condition, alpha=0.1)
-gfp_dds_5 <- run_scRNAseq_ZINB_DESeq(count_matrix=gfp.cts, expdesign=gfp.design, colCondition=~condition, alpha=0.05)
+#gfp_dds_5 <- run_scRNAseq_ZINB_DESeq(count_matrix=gfp.cts, expdesign=gfp.design, colCondition=~condition, alpha=0.05)
 write.csv(gfp_dds$zinb.res, file='gfp_dge_results.csv')
 
 
@@ -152,21 +152,27 @@ heatmap.2(assay(gfp_dds$rld)[select,], col = hmcol,
 
 # no Ilp2 or Ilp1
 # make a character vector such as this with the names of the genes
-neuro_list <- c('Mip', 'SIFa', 'CCAP', 'Capa', 'Akh', 'Hug', 'Ilp7', 'AstCC', 'Ptth', 'Ilp8', 'Eh', 'SP', 'CCHa1', 'ETH', 'Lk', 'Ilp4', 'Gpa2', 'Pburs', 'FMRFa', 'Ilp5', 'Crz', 'Ilp3', 'NPF', 'Nplp2', 'Dh31', 'Gpb5', 'Ms', 'Dsk', 'ITP', 'CCHa2', 'AstC', 'Orcokinin', 'Nplp3', 'Ilp6', 'Nplp1', 'Proc', 'Tk', 'Nplp4', 'AstA', 'Dh44')
-
+# header for column 1 must be gene_name
+# you can replace the neuro_peptide.csv with whatever the csv filename of the new gene name set
+neuro_df <- read.csv('neuro_peptide.csv', stringsAsFactors = F, header = T)
+neuro_df$gene_name <- toupper(neuro_df$gene_name)
 # creates a blue to red color palette
 neuro.hmcol <- colorRampPalette(rev(brewer.pal(9, "RdBu")))(100)
 
 # finds the indices of the desired genes in the character vector you make
 # make sure to change the neuro_list to whatever character vector variable name
-idx <- which(rownames(assay(gfp_dds$rld)) %in% neuro_list, arr.ind=TRUE)
+idx <- which(toupper(rownames(assay(gfp_dds$rld))) %in% neuro_df$gene_name, arr.ind=TRUE)
 # generates the heat map in order
 # need to fix the number of genes showing up on the y axis
-heatmap.2(assay(gfp_dds$rld)[idx,], col = neuro.hmcol,
-          Rowv = TRUE, Colv = TRUE, scale="none",
-          dendrogram="none", trace="none", margin=c(10, 6))
 
+neuro_gene_rld <- assay(gfp_dds$rld)[idx,]
+sort_col_names <- sort(colnames(neuro_gene_rld))
+neuro_gene_rld_sorted <- neuro_gene_rld[,sort_col_names]
+neuro_ordered_rowmean <- neuro_gene_rld_sorted[order(rowMeans(neuro_gene_rld_sorted), decreasing = TRUE), ]
 
+neuro.hm <- heatmap.2(neuro_ordered_rowmean, col = neuro.hmcol,
+          Rowv = FALSE, Colv = FALSE, scale="none",
+          dendrogram="none", trace="none", margin=c(10, 6), symbreaks = FALSE)
 
 # regularized log transformation
 # remove the dependence of the variance on the mean, 
